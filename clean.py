@@ -1,5 +1,5 @@
 import pandas as pd
-df = pd.read_csv("keystroke_attempts_fixed.csv")
+df = pd.read_csv("keystroke_attempts_valid.csv")
 #preserve og
 raw_df = df.copy()
 #print(df.head())
@@ -60,4 +60,4 @@ for user in df["user_id"].unique():
 #    ["user_id", "attempt_id", "key", "flight_time_ms"]])
 
 #save changes in new file
-df.to_csv("keystroke_attempts_fixed.csv", index=False)
+#df.to_csv("keystroke_attempts_fixed.csv", index=False)
