@@ -1,0 +1,6 @@
+user_id,attempt_id,event_count,typed_password,rejection_reason
+User1,36,42,te quick brown fox jumps over the lazy dog,"Incorrect key-event count: expected 43, found 42 | Word 1 incorrect: expected 'the', found 'te' | Full password mismatch: typed 'te quick brown fox jumps over the lazy dog'"
+User2,166,43,the quick brown fox jumps over the lazy dog,Release timestamps are not chronological
+User2,172,43,the quick brown fox jumps over the lazy dog,Release timestamps are not chronological
+User3,94,43,the quick brown fox jumps over the lazy dog,Release timestamps are not chronological
+User3,165,43,the quick brown fox jumps over the lazy dog,Release timestamps are not chronological
