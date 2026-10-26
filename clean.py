@@ -29,16 +29,22 @@ for user in df["user_id"].unique():
 
 #change wrong attempt numbers for user3
 # Select User3's attempts numbered 201–300
-mask = (
-    (df["user_id"] == "User3") &
-    (df["attempt_id"].between(201, 300))
-)
+#mask = (
+#    (df["user_id"] == "User3") &
+#    (df["attempt_id"].between(201, 300)))
 # Subtract 100 from those attempt numbers
-df.loc[mask, "attempt_id"] -= 100
+#df.loc[mask, "attempt_id"] -= 100
 
 #get statistics for each user
-print(df.groupby("user_id")["key"].value_counts())
+#print(df.groupby("user_id")["key"].value_counts())
 
 #check for missing values
-
+print(df.isna().sum())
 #negative dwell times and flight times. press time>release time
+#identify rows with the missing values
+print(df[df["flight_time_ms"].isna()][
+    ["user_id", "attempt_id", "key", "flight_time_ms"]
+])
+
+#save changes in new file
+df.to_csv("keystroke_attempts_fixed.csv", index=False)
