@@ -22,7 +22,11 @@ attempt_sizes = df.groupby(
     ["user_id", "attempt_id"]
 ).size()
 #print(attempt_sizes.value_counts().sort_index())
-
+duplicate_attempts = [176, 177, 178, 179,180,181,182,183,184,185,186,187,188]
+for attempt in duplicate_attempts:
+    mask = (df["user_id"] == "User1") & (df["attempt_id"] == attempt)
+    rows = df[mask].index
+    df = df.drop(rows[43:])
 
 #find missing attempts for each user
 expected = set(range(1, 201))
@@ -54,8 +58,6 @@ for user in df["user_id"].unique():
 #identify rows with the missing values
 #print(df[df["flight_time_ms"].isna()][
 #    ["user_id", "attempt_id", "key", "flight_time_ms"]])
-
-
 
 #save changes in new file
 df.to_csv("keystroke_attempts_fixed.csv", index=False)
