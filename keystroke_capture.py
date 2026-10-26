@@ -6,6 +6,7 @@ import os
 PHRASE = "the quick brown fox jumps over the lazy dog"
 VALID_USERS = {"User1", "User2", "User3", "User4"}
 
+# Get User ID
 user_id = input(
     "Enter your User ID (User1/User2/User3/User4): "
 ).strip()
@@ -14,41 +15,79 @@ if user_id not in VALID_USERS:
     print("Invalid User ID.")
     raise SystemExit(1)
 
-# A new file, separate from your old per-key CSV files
+# Get starting attempt number
+try:
+    starting_attempt = int(
+        input("Enter starting attempt number: ").strip()
+    )
+
+    if starting_attempt < 1:
+        raise ValueError
+
+except ValueError:
+    print("Invalid attempt number. Enter a positive integer.")
+    raise SystemExit(1)
+
+# CSV file
 filename = "keystroke_attempts.csv"
-file_exists = os.path.exists(filename) and os.path.getsize(filename) > 0
+file_exists = (
+    os.path.exists(filename)
+    and os.path.getsize(filename) > 0
+)
 
-# Continue attempt numbering when restarting the program
-attempt_id = 0
+expected_columns = [
+    "user_id",
+    "attempt_id",
+    "key",
+    "press_time",
+    "release_time",
+    "dwell_time_ms",
+    "flight_time_ms"
+]
 
+# Validate existing CSV and check attempt IDs
 if file_exists:
-    with open(filename, "r", newline="", encoding="utf-8") as existing_file:
+    with open(
+        filename, "r", newline="", encoding="utf-8"
+    ) as existing_file:
+
         reader = csv.DictReader(existing_file)
 
-        if reader.fieldnames and "attempt_id" in reader.fieldnames:
-            for row in reader:
+        if reader.fieldnames != expected_columns:
+            print("CSV format mismatch.")
+            print(
+                "Rename or correct the existing "
+                "keystroke_attempts.csv file."
+            )
+            raise SystemExit(1)
+
+        existing_attempts = set()
+
+        for row in reader:
+            if row["user_id"] == user_id:
                 try:
-                    attempt_id = max(attempt_id, int(row["attempt_id"]))
+                    existing_attempts.add(
+                        int(row["attempt_id"])
+                    )
                 except (ValueError, TypeError):
                     pass
 
-# Stop if an old file has an incompatible structure
-expected_columns = [
-    "user_id", "attempt_id", "key",
-    "press_time", "release_time",
-    "dwell_time_ms", "flight_time_ms"
-]
-
-if file_exists:
-    with open(filename, "r", newline="", encoding="utf-8") as check_file:
-        header = next(csv.reader(check_file), [])
-
-    if header != expected_columns:
-        print("CSV format mismatch.")
-        print("Rename or remove the old keystroke_attempts.csv file.")
+    # Prevent overwriting or reusing an existing attempt ID
+    if starting_attempt in existing_attempts:
+        print(
+            f"Attempt {starting_attempt} already exists "
+            f"for {user_id}."
+        )
+        print("Choose an unused starting attempt number.")
         raise SystemExit(1)
 
-file = open(filename, "a", newline="", encoding="utf-8")
+# Set counter so the first saved attempt uses starting_attempt
+attempt_id = starting_attempt - 1
+
+# Open CSV in append mode
+file = open(
+    filename, "a", newline="", encoding="utf-8"
+)
 writer = csv.writer(file)
 
 if not file_exists:
@@ -83,8 +122,10 @@ def update_typed_text(key):
     else:
         try:
             char = key.char
+
             if char is not None and char.isprintable():
                 typed_text += char.lower()
+
         except AttributeError:
             pass
 
@@ -102,6 +143,7 @@ def on_press(key):
     if key == keyboard.Key.enter:
         typed_text = ""
         attempt_events.clear()
+        press_times.clear()
         complete_pending = False
         print("Incomplete attempt discarded. Start again.")
         return
@@ -124,10 +166,13 @@ def on_press(key):
 
     update_typed_text(key)
 
-    # The full phrase, not just the final letter, is the boundary
+    # Detect the complete phrase
     if typed_text == PHRASE:
         complete_pending = True
-        print("\nFull phrase detected! Finishing this attempt...")
+        print(
+            "\nFull phrase detected! "
+            "Finishing this attempt..."
+        )
 
 
 def on_release(key):
@@ -142,9 +187,12 @@ def on_release(key):
 
         press_time = data["press_time"]
         flight_time = data["flight_time"]
-        dwell_time = (release_time - press_time) * 1000
 
-        # Keep the timings in memory until the whole phrase is complete
+        dwell_time = (
+            release_time - press_time
+        ) * 1000
+
+        # Store events until the entire phrase is complete
         attempt_events.append([
             key_name,
             round(press_time, 6),
@@ -161,7 +209,7 @@ def on_release(key):
 
     last_release_time = release_time
 
-    # Save only after the final character has been released
+    # Save after the final character is released
     if complete_pending and key_name.lower() == "g":
         attempt_id += 1
 
@@ -174,9 +222,7 @@ def on_release(key):
 
         file.flush()
 
-        print(
-            f"\nAttempt {attempt_id} saved successfully!"
-        )
+        print(f"\nAttempt {attempt_id} saved successfully!")
         print(f"Phrase: {PHRASE}")
         print("Type the phrase again for another attempt.\n")
 
@@ -186,9 +232,10 @@ def on_release(key):
         complete_pending = False
 
 
-print("\nKESTROKE DYNAMICS DATA COLLECTION")
-print("--------------------------------")
+print("\nKEYSTROKE DYNAMICS DATA COLLECTION")
+print("----------------------------------")
 print(f"User: {user_id}")
+print(f"Starting attempt: {starting_attempt}")
 print(f"Required phrase: {PHRASE}")
 print("Type the exact phrase to save an attempt.")
 print("Press ENTER to discard an incomplete attempt.")
