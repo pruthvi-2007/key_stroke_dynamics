@@ -12,7 +12,17 @@ df = df.sort_values(by = ["user_id", "attempt_id"])
 print(df.duplicated().sum())
 
 #count number of attempts per user
+print(df.value_counts("user_id")/43)
 print(df.groupby("user_id")["attempt_id"].nunique())
+
+sizes = df.groupby(["user_id", "attempt_id"]).size()
+print(sizes[sizes >43])
+#find the attempts with more than 43 rows
+attempt_sizes = df.groupby(
+    ["user_id", "attempt_id"]
+).size()
+#print(attempt_sizes.value_counts().sort_index())
+
 
 #find missing attempts for each user
 expected = set(range(1, 201))
@@ -23,7 +33,7 @@ for user in df["user_id"].unique():
 
     missing = sorted(expected - existing)
 
-    print(user, "missing attempts:", missing)
+    #print(user, "missing attempts:", missing)
 
 #merge missing attempts of User2
 
@@ -39,12 +49,13 @@ for user in df["user_id"].unique():
 #print(df.groupby("user_id")["key"].value_counts())
 
 #check for missing values
-print(df.isna().sum())
+#print(df.isna().sum())
 #negative dwell times and flight times. press time>release time
 #identify rows with the missing values
-print(df[df["flight_time_ms"].isna()][
-    ["user_id", "attempt_id", "key", "flight_time_ms"]
-])
+#print(df[df["flight_time_ms"].isna()][
+#    ["user_id", "attempt_id", "key", "flight_time_ms"]])
+
+
 
 #save changes in new file
 df.to_csv("keystroke_attempts_fixed.csv", index=False)
