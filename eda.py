@@ -8,8 +8,6 @@ print(
       .median()
 )
 
-import matplotlib.pyplot as plt
-
 df["dwell_time_ms"].hist(bins=30)
 plt.xlabel("Dwell time (ms)")
 plt.ylabel("Frequency")
