@@ -1,0 +1,343 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 12px;
+            font-family: Arial, sans-serif;
+            color: var(--text-color, #222);
+            background: transparent;
+        }
+
+        .capture-box {
+            width: 100%;
+            min-height: 150px;
+            padding: 18px;
+            border: 2px solid #888;
+            border-radius: 12px;
+            background: var(--secondary-background-color, #f7f7f7);
+            cursor: text;
+            outline: none;
+        }
+
+        .capture-box:focus {
+            border-color: #3978d4;
+        }
+
+        .label {
+            font-size: 14px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .phrase {
+            font-size: 20px;
+            line-height: 1.8;
+            overflow-wrap: anywhere;
+            min-height: 55px;
+        }
+
+        .status {
+            margin-top: 14px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .progress {
+            margin-top: 8px;
+            font-size: 13px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+    <div
+        id="captureBox"
+        class="capture-box"
+        tabindex="0"
+        role="textbox"
+        aria-label="Keystroke phrase capture area"
+    >
+        <div class="label">Click here, then type the phrase</div>
+        <div id="phraseDisplay" class="phrase"></div>
+        <div id="status" class="status">
+            Waiting for the phrase.
+        </div>
+        <div id="progress" class="progress">0 characters captured</div>
+    </div>
+
+    <script>
+        (() => {
+            "use strict";
+
+            const box = document.getElementById("captureBox");
+            const phraseDisplay = document.getElementById("phraseDisplay");
+            const statusDisplay = document.getElementById("status");
+            const progressDisplay = document.getElementById("progress");
+
+            let phrase = "the quick brown fox jumps over the lazy dog";
+            let resetToken = null;
+
+            // Events are added on keydown, preserving phrase order.
+            let events = [];
+
+            // Maps each physical key code to its currently held event.
+            let pending = new Map();
+
+            let typed = "";
+            let lastReleaseTime = null;
+            let completed = false;
+
+            function sendValue(value) {
+                window.parent.postMessage(
+                    {
+                        isStreamlitMessage: true,
+                        type: "streamlit:setComponentValue",
+                        value: value
+                    },
+                    "*"
+                );
+            }
+
+            function setFrameHeight() {
+                window.parent.postMessage(
+                    {
+                        isStreamlitMessage: true,
+                        type: "streamlit:setFrameHeight",
+                        height: document.body.scrollHeight
+                    },
+                    "*"
+                );
+            }
+
+            function updateDisplay() {
+                phraseDisplay.textContent = typed || " ";
+                progressDisplay.textContent =
+                    `${typed.length} / ${phrase.length} characters captured`;
+
+                setFrameHeight();
+            }
+
+            function resetAttempt(message) {
+                events = [];
+                pending.clear();
+                typed = "";
+                lastReleaseTime = null;
+                completed = false;
+
+                statusDisplay.textContent =
+                    message || "Start typing the phrase.";
+
+                sendValue(null);
+                updateDisplay();
+            }
+
+            function finishAttempt() {
+                if (completed) return;
+
+                if (events.length !== phrase.length) {
+                    resetAttempt(
+                        "Incorrect event count. Please try again."
+                    );
+                    return;
+                }
+
+                if (pending.size !== 0) {
+                    return;
+                }
+
+                const actualPhrase = events
+                    .map(event => event.key)
+                    .join("");
+
+                if (actualPhrase !== phrase) {
+                    resetAttempt(
+                        "The captured phrase does not match. Please retry."
+                    );
+                    return;
+                }
+
+                const invalidEvent = events.some(event =>
+                    !Number.isFinite(event.press_ms) ||
+                    !Number.isFinite(event.release_ms) ||
+                    event.release_ms < event.press_ms
+                );
+
+                if (invalidEvent) {
+                    resetAttempt(
+                        "A key timing is invalid. Please try again."
+                    );
+                    return;
+                }
+
+                completed = true;
+                statusDisplay.textContent =
+                    "Phrase captured successfully. Return to the app to authenticate.";
+
+                sendValue({
+                    completed: true,
+                    phrase: actualPhrase,
+                    keystrokes: events.map(event => ({
+                        key: event.key,
+                        press_ms: event.press_ms,
+                        release_ms: event.release_ms,
+                        flight_ms: event.flight_ms
+                    }))
+                });
+
+                updateDisplay();
+            }
+
+            function handleKeyDown(event) {
+                if (completed) {
+                    if (event.key.length === 1) {
+                        event.preventDefault();
+                    }
+                    return;
+                }
+
+                // Ignore modifiers, shortcuts, and repeated keydown events.
+                if (
+                    event.repeat ||
+                    event.ctrlKey ||
+                    event.metaKey ||
+                    event.altKey ||
+                    event.isComposing
+                ) {
+                    return;
+                }
+
+                // Only capture printable single-character keys.
+                if (event.key.length !== 1) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                const char = event.key.toLowerCase();
+                const expectedChar = phrase[typed.length];
+
+                if (char !== expectedChar) {
+                    resetAttempt(
+                        "Incorrect character. The attempt was reset. Please start again."
+                    );
+                    return;
+                }
+
+                const code = event.code || event.key;
+
+                // Avoid recording the same physical key twice while held.
+                if (pending.has(code)) {
+                    return;
+                }
+
+                const pressMs = performance.now();
+
+                // Match the working pynput definition: measure from the
+                // most recent tracked key release before this keydown.
+                const flightMs =
+                    lastReleaseTime === null
+                        ? null
+                        : pressMs - lastReleaseTime;
+
+                const record = {
+                    key: char,
+                    press_ms: pressMs,
+                    release_ms: null,
+                    flight_ms: flightMs
+                };
+
+                // Add now, not on keyup, so event positions follow typing order.
+                events.push(record);
+                pending.set(code, record);
+                typed += char;
+
+                statusDisplay.textContent =
+                    "Keep typing the phrase.";
+
+                updateDisplay();
+            }
+
+            function handleKeyUp(event) {
+                const code = event.code || event.key;
+                const record = pending.get(code);
+
+                if (!record) {
+                    return;
+                }
+
+                const releaseMs = performance.now();
+
+                record.release_ms = releaseMs;
+
+                // Update on each tracked key release, matching pynput.
+                lastReleaseTime = releaseMs;
+                pending.delete(code);
+
+                if (typed.length === phrase.length && pending.size === 0) {
+                    finishAttempt();
+                }
+            }
+
+            box.addEventListener("click", () => {
+                box.focus();
+            });
+
+            // Listen on the iframe document; focus the capture box before typing.
+            document.addEventListener("keydown", handleKeyDown, true);
+            document.addEventListener("keyup", handleKeyUp, true);
+
+            window.addEventListener("blur", () => {
+                // Do not silently keep a partially held key after focus is lost.
+                if (pending.size > 0 && !completed) {
+                    resetAttempt(
+                        "Focus was lost while a key was held. Please retry."
+                    );
+                }
+            });
+
+            window.addEventListener("message", event => {
+                const message = event.data;
+
+                if (!message || message.type !== "streamlit:render") {
+                    return;
+                }
+
+                const args = message.args || {};
+
+                if (typeof args.phrase === "string") {
+                    phrase = args.phrase;
+                }
+
+                if (args.reset_token !== resetToken) {
+                    resetToken = args.reset_token;
+                    resetAttempt("Click this area and type the phrase.");
+                }
+
+                updateDisplay();
+            });
+
+            updateDisplay();
+
+            window.parent.postMessage(
+                {
+                    isStreamlitMessage: true,
+                    type: "streamlit:componentReady",
+                    apiVersion: 1
+                },
+                "*"
+            );
+        })();
+    </script>
+</body>
+</html>
